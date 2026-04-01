@@ -85,13 +85,13 @@ func TestCreateSandbox(t *testing.T) {
 			}
 			var body CreateSandboxInput
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body.Base != "ubuntu" {
-				t.Errorf("base = %q, want ubuntu", body.Base)
+			if body.Base != "openclaw" {
+				t.Errorf("base = %q, want openclaw", body.Base)
 			}
 			writeJSON(w, want)
 		},
 	})
-	got, err := c.CreateSandbox(context.Background(), CreateSandboxInput{Base: "ubuntu"})
+	got, err := c.CreateSandbox(context.Background(), CreateSandboxInput{Base: "openclaw"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

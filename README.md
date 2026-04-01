@@ -30,7 +30,7 @@ func main() {
 
     // Create a sandbox — returns a handle with data + methods combined
     sb, err := client.CreateSandbox(ctx, pocketenv.CreateSandboxInput{
-        Base: "ubuntu",
+        Base: "openclaw",
         Name: "my-sandbox",
     })
     if err != nil {
@@ -58,7 +58,7 @@ func main() {
 
 ```go
 // Create — returns *Sandbox with data fields AND methods ready to use
-sb, err := client.CreateSandbox(ctx, pocketenv.CreateSandboxInput{Base: "ubuntu"})
+sb, err := client.CreateSandbox(ctx, pocketenv.CreateSandboxInput{Base: "openclaw"})
 fmt.Println(sb.ID, sb.Name, sb.Status) // data fields directly accessible
 
 // Get — same: returns *Sandbox
