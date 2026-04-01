@@ -52,7 +52,7 @@ func main() {
 | Option | Description |
 |---|---|
 | `WithToken(token)` | Bearer token for authentication |
-| `WithBaseURL(url)` | API base URL (default: `http://localhost:8789`) |
+| `WithBaseURL(url)` | API base URL (default: `https://api.pocketenv.io`) |
 
 ## Sandboxes
 
