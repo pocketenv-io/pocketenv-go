@@ -1,6 +1,6 @@
 # pocketenv-go
 
-Official Go SDK for the [Pocketenv](https://pocketenv.io) API.
+Official Go SDK for [Pocketenv](https://pocketenv.io).
 
 ## Installation
 
