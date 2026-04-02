@@ -20,10 +20,13 @@ import (
     pocketenv "github.com/pocketenv-io/pocketenv-go"
 )
 
+
 func main() {
-    client := pocketenv.New(
-        pocketenv.WithToken("your-api-token")
-    )
+    // Token is read from POCKETENV_TOKEN env var or ~/.pocketenv/token.json
+    client, err := pocketenv.New()
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // Create a sandbox — returns a handle with data + methods combined
     sb, err := client.CreateSandbox(pocketenv.CreateSandboxInput{
@@ -50,6 +53,12 @@ func main() {
 |---|---|
 | `WithToken(token)` | Bearer token for authentication |
 | `WithBaseURL(url)` | API base URL (default: `https://api.pocketenv.io`) |
+
+If `WithToken` is not used, the token is resolved in this order:
+1. `POCKETENV_TOKEN` environment variable
+2. `~/.pocketenv/token.json` (`{"token": "..."}`)
+
+`New` returns an error if none of the above provide a token.
 
 ## Sandboxes
 

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 )
 
 const defaultBaseURL = "https://api.pocketenv.io"
@@ -32,7 +34,7 @@ func WithToken(token string) Option {
 	}
 }
 
-func New(opts ...Option) *Client {
+func New(opts ...Option) (*Client, error) {
 	c := &Client{
 		baseURL:    defaultBaseURL,
 		httpClient: &http.Client{},
@@ -40,7 +42,39 @@ func New(opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
-	return c
+	if c.token == "" {
+		if token := os.Getenv("POCKETENV_TOKEN"); token != "" {
+			c.token = token
+		} else {
+			token, err := readTokenFile()
+			if err != nil {
+				return nil, fmt.Errorf("pocketenv: no token provided, POCKETENV_TOKEN not set, and ~/.pocketenv/token.json is unavailable: %w", err)
+			}
+			if token == "" {
+				return nil, fmt.Errorf("pocketenv: token is empty in ~/.pocketenv/token.json")
+			}
+			c.token = token
+		}
+	}
+	return c, nil
+}
+
+func readTokenFile() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".pocketenv", "token.json"))
+	if err != nil {
+		return "", err
+	}
+	var v struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return "", err
+	}
+	return v.Token, nil
 }
 
 func (c *Client) Sandbox(id string) *Sandbox {

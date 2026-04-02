@@ -18,7 +18,10 @@ func newTestServer(t *testing.T, routes map[string]http.HandlerFunc) (*Client, *
 	}
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	c := New(WithBaseURL(srv.URL), WithToken("test-token"))
+	c, err := New(WithBaseURL(srv.URL), WithToken("test-token"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	return c, srv
 }
 
@@ -36,24 +39,39 @@ func assertBearer(t *testing.T, r *http.Request, want string) {
 }
 
 func TestNew_defaults(t *testing.T) {
-	c := New()
+	c, err := New(WithToken("test"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	if c.baseURL != defaultBaseURL {
 		t.Errorf("baseURL = %q, want %q", c.baseURL, defaultBaseURL)
 	}
-	if c.token != "" {
-		t.Errorf("token should be empty by default")
+}
+
+func TestNew_noToken(t *testing.T) {
+	// Ensure no token file exists for this test by pointing home somewhere empty.
+	t.Setenv("HOME", t.TempDir())
+	_, err := New()
+	if err == nil {
+		t.Fatal("expected error when no token provided")
 	}
 }
 
 func TestWithBaseURL(t *testing.T) {
-	c := New(WithBaseURL("https://api.example.com"))
+	c, err := New(WithBaseURL("https://api.example.com"), WithToken("test"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	if c.baseURL != "https://api.example.com" {
 		t.Errorf("baseURL = %q", c.baseURL)
 	}
 }
 
 func TestWithToken(t *testing.T) {
-	c := New(WithToken("my-token"))
+	c, err := New(WithToken("my-token"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	if c.token != "my-token" {
 		t.Errorf("token = %q", c.token)
 	}
@@ -593,7 +611,10 @@ func TestServiceClient_CRUD(t *testing.T) {
 // ── Helpers scoped to Client ───────────────────────────────────────────────────
 
 func TestClient_SandboxHandle(t *testing.T) {
-	c := New()
+	c, err := New(WithToken("test"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	sb := c.Sandbox("abc")
 	if sb.ID != "abc" {
 		t.Errorf("ID = %q, want abc", sb.ID)
