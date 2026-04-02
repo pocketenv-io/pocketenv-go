@@ -48,25 +48,25 @@ func (c *Client) Sandbox(id string) *Sandbox {
 }
 
 // CreateSandbox creates a new sandbox and returns it as a ready-to-use handle.
-func (c *Client) CreateSandbox(ctx context.Context, input CreateSandboxInput) (*Sandbox, error) {
+func (c *Client) CreateSandbox(input CreateSandboxInput) (*Sandbox, error) {
 	var view SandboxView
-	if err := c.post(ctx, "/xrpc/io.pocketenv.sandbox.createSandbox", nil, input, &view); err != nil {
+	if err := c.post("/xrpc/io.pocketenv.sandbox.createSandbox", nil, input, &view); err != nil {
 		return nil, err
 	}
 	return &Sandbox{SandboxView: view, client: c}, nil
 }
 
-func (c *Client) GetSandbox(ctx context.Context, id string) (*Sandbox, error) {
+func (c *Client) GetSandbox(id string) (*Sandbox, error) {
 	var result struct {
 		Sandbox SandboxView `json:"sandbox"`
 	}
-	if err := c.get(ctx, "/xrpc/io.pocketenv.sandbox.getSandbox", url.Values{"id": {id}}, &result); err != nil {
+	if err := c.get("/xrpc/io.pocketenv.sandbox.getSandbox", url.Values{"id": {id}}, &result); err != nil {
 		return nil, err
 	}
 	return &Sandbox{SandboxView: result.Sandbox, client: c}, nil
 }
 
-func (c *Client) ListSandboxes(ctx context.Context, offset, limit int) ([]*Sandbox, int, error) {
+func (c *Client) ListSandboxes(offset, limit int) ([]*Sandbox, int, error) {
 	var result struct {
 		Sandboxes []SandboxView `json:"sandboxes"`
 		Total     int           `json:"total"`
@@ -75,7 +75,7 @@ func (c *Client) ListSandboxes(ctx context.Context, offset, limit int) ([]*Sandb
 		"offset": {fmt.Sprintf("%d", offset)},
 		"limit":  {fmt.Sprintf("%d", limit)},
 	}
-	if err := c.get(ctx, "/xrpc/io.pocketenv.sandbox.getSandboxes", params, &result); err != nil {
+	if err := c.get("/xrpc/io.pocketenv.sandbox.getSandboxes", params, &result); err != nil {
 		return nil, 0, err
 	}
 	sandboxes := make([]*Sandbox, len(result.Sandboxes))
@@ -107,19 +107,19 @@ func (c *Client) Services(sandboxID string) *ServiceClient {
 
 // HTTP helpers
 
-func (c *Client) get(ctx context.Context, path string, params url.Values, out any) error {
+func (c *Client) get(path string, params url.Values, out any) error {
 	u := c.baseURL + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return err
 	}
 	return c.do(req, out)
 }
 
-func (c *Client) post(ctx context.Context, path string, params url.Values, body any, out any) error {
+func (c *Client) post(path string, params url.Values, body any, out any) error {
 	u := c.baseURL + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
@@ -132,7 +132,7 @@ func (c *Client) post(ctx context.Context, path string, params url.Values, body 
 		}
 		bodyReader = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bodyReader)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, u, bodyReader)
 	if err != nil {
 		return err
 	}

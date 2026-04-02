@@ -1,7 +1,6 @@
 package pocketenv
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -66,7 +65,7 @@ func TestDo_HTTPError(t *testing.T) {
 			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		},
 	})
-	_, err := c.GetSandbox(context.Background(), "missing")
+	_, err := c.GetSandbox("missing")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -91,7 +90,7 @@ func TestCreateSandbox(t *testing.T) {
 			writeJSON(w, want)
 		},
 	})
-	got, err := c.CreateSandbox(context.Background(), CreateSandboxInput{Base: "openclaw"})
+	got, err := c.CreateSandbox(CreateSandboxInput{Base: "openclaw"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestGetSandbox(t *testing.T) {
 			writeJSON(w, map[string]any{"sandbox": want})
 		},
 	})
-	got, err := c.GetSandbox(context.Background(), "s1")
+	got, err := c.GetSandbox("s1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +130,7 @@ func TestListSandboxes(t *testing.T) {
 			writeJSON(w, map[string]any{"sandboxes": boxes, "total": 2})
 		},
 	})
-	got, total, err := c.ListSandboxes(context.Background(), 0, 10)
+	got, total, err := c.ListSandboxes(0, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,10 +159,10 @@ func TestSandbox_StartStop(t *testing.T) {
 		},
 	})
 	sb := c.Sandbox("s1")
-	if err := sb.Start(context.Background()); err != nil {
+	if err := sb.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if err := sb.Stop(context.Background()); err != nil {
+	if err := sb.Stop(); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if !called["start"] || !called["stop"] {
@@ -179,7 +178,7 @@ func TestSandbox_Delete(t *testing.T) {
 			writeJSON(w, map[string]any{})
 		},
 	})
-	if err := c.Sandbox("s1").Delete(context.Background()); err != nil {
+	if err := c.Sandbox("s1").Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if !called {
@@ -198,7 +197,7 @@ func TestSandbox_Exec(t *testing.T) {
 			writeJSON(w, ExecResult{Stdout: "hello\n", Stderr: "", ExitCode: 0})
 		},
 	})
-	res, err := c.Sandbox("s1").Exec(context.Background(), "echo hello")
+	res, err := c.Sandbox("s1").Exec("echo", "hello")
 	if err != nil {
 		t.Fatalf("Exec: %v", err)
 	}
@@ -220,10 +219,10 @@ func TestSandbox_ExposeUnexposePort(t *testing.T) {
 		},
 	})
 	sb := c.Sandbox("s1")
-	if err := sb.ExposePort(context.Background(), 3000, "app"); err != nil {
+	if err := sb.ExposePort(3000, "app"); err != nil {
 		t.Fatalf("ExposePort: %v", err)
 	}
-	if err := sb.UnexposePort(context.Background(), 3000); err != nil {
+	if err := sb.UnexposePort(3000); err != nil {
 		t.Fatalf("UnexposePort: %v", err)
 	}
 	if !called["expose"] || !called["unexpose"] {
@@ -238,7 +237,7 @@ func TestSandbox_GetExposedPorts(t *testing.T) {
 			writeJSON(w, map[string]any{"ports": want})
 		},
 	})
-	got, err := c.Sandbox("s1").GetExposedPorts(context.Background())
+	got, err := c.Sandbox("s1").GetExposedPorts()
 	if err != nil {
 		t.Fatalf("GetExposedPorts: %v", err)
 	}
@@ -264,14 +263,14 @@ func TestSandbox_SshKeys(t *testing.T) {
 		},
 	})
 	sb := c.Sandbox("s1")
-	got, err := sb.GetSshKeys(context.Background())
+	got, err := sb.GetSshKeys()
 	if err != nil {
 		t.Fatalf("GetSshKeys: %v", err)
 	}
 	if got.PublicKey != want.PublicKey {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if err := sb.PutSshKeys(context.Background(), "ssh-rsa AAAA", "-----BEGIN"); err != nil {
+	if err := sb.PutSshKeys("ssh-rsa AAAA", "-----BEGIN"); err != nil {
 		t.Fatalf("PutSshKeys: %v", err)
 	}
 }
@@ -312,27 +311,27 @@ func TestSecretClient_CRUD(t *testing.T) {
 
 	sc := c.Sandbox("s1").Secrets()
 
-	added, err := sc.Add(context.Background(), "DB_PASS", "secret")
+	added, err := sc.Add("DB_PASS", "secret")
 	if err != nil || added.ID != "sec1" {
 		t.Fatalf("Add: %v, got %+v", err, added)
 	}
 
-	secrets, total, err := sc.List(context.Background(), 0, 10)
+	secrets, total, err := sc.List(0, 10)
 	if err != nil || total != 1 || len(secrets) != 1 {
 		t.Fatalf("List: %v, total=%d len=%d", err, total, len(secrets))
 	}
 
-	got, err := sc.Get(context.Background(), "sec1")
+	got, err := sc.Get("sec1")
 	if err != nil || got.ID != "sec1" {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	updated, err := sc.Update(context.Background(), "sec1", "DB_PASS", "new-secret")
+	updated, err := sc.Update("sec1", "DB_PASS", "new-secret")
 	if err != nil || updated.ID != "sec1" {
 		t.Fatalf("Update: %v, got %+v", err, updated)
 	}
 
-	if err := sc.Delete(context.Background(), "sec1"); err != nil {
+	if err := sc.Delete("sec1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
@@ -367,27 +366,27 @@ func TestVariableClient_CRUD(t *testing.T) {
 
 	vc := c.Sandbox("s1").Variables()
 
-	added, err := vc.Add(context.Background(), "PORT", "8080")
+	added, err := vc.Add("PORT", "8080")
 	if err != nil || added.ID != "var1" {
 		t.Fatalf("Add: %v, got %+v", err, added)
 	}
 
-	vars, total, err := vc.List(context.Background(), 0, 10)
+	vars, total, err := vc.List(0, 10)
 	if err != nil || total != 1 || len(vars) != 1 {
 		t.Fatalf("List: %v, total=%d len=%d", err, total, len(vars))
 	}
 
-	got, err := vc.Get(context.Background(), "var1")
+	got, err := vc.Get("var1")
 	if err != nil || got.Name != "PORT" {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	updated, err := vc.Update(context.Background(), "var1", "PORT", "9090")
+	updated, err := vc.Update("var1", "PORT", "9090")
 	if err != nil || updated.ID != "var1" {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := vc.Delete(context.Background(), "var1"); err != nil {
+	if err := vc.Delete("var1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
@@ -430,25 +429,25 @@ func TestFileClient_CRUD(t *testing.T) {
 
 	fc := c.Sandbox("s1").Files()
 
-	if err := fc.Add(context.Background(), "/app/main.go", "package main"); err != nil {
+	if err := fc.Add("/app/main.go", "package main"); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
-	files, total, err := fc.List(context.Background(), 0, 20)
+	files, total, err := fc.List(0, 20)
 	if err != nil || total != 1 || len(files) != 1 {
 		t.Fatalf("List: %v, total=%d len=%d", err, total, len(files))
 	}
 
-	got, err := fc.Get(context.Background(), "f1")
+	got, err := fc.Get("f1")
 	if err != nil || got.Path != "/app/main.go" {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	if err := fc.Update(context.Background(), "f1", "/app/main.go", "package main\n"); err != nil {
+	if err := fc.Update("f1", "/app/main.go", "package main\n"); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := fc.Delete(context.Background(), "f1"); err != nil {
+	if err := fc.Delete("f1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
@@ -491,25 +490,25 @@ func TestVolumeClient_CRUD(t *testing.T) {
 
 	vc := c.Sandbox("s1").Volumes()
 
-	if err := vc.Add(context.Background(), "data", "/data"); err != nil {
+	if err := vc.Add("data", "/data"); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
-	vols, total, err := vc.List(context.Background(), 0, 20)
+	vols, total, err := vc.List(0, 20)
 	if err != nil || total != 1 || len(vols) != 1 {
 		t.Fatalf("List: %v, total=%d len=%d", err, total, len(vols))
 	}
 
-	got, err := vc.Get(context.Background(), "v1")
+	got, err := vc.Get("v1")
 	if err != nil || got.Name != "data" {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	if err := vc.Update(context.Background(), "v1", "data", "/mnt/data"); err != nil {
+	if err := vc.Update("v1", "data", "/mnt/data"); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := vc.Delete(context.Background(), "v1"); err != nil {
+	if err := vc.Delete("v1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
@@ -564,29 +563,29 @@ func TestServiceClient_CRUD(t *testing.T) {
 
 	sc := c.Sandbox("s1").Services()
 
-	if err := sc.Add(context.Background(), AddServiceInput{Name: "web", Command: "node server.js", Ports: []int{3000}}); err != nil {
+	if err := sc.Add(AddServiceInput{Name: "web", Command: "node server.js", Ports: []int{3000}}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
-	svcs, err := sc.List(context.Background())
+	svcs, err := sc.List()
 	if err != nil || len(svcs) != 1 || svcs[0].ID != "svc1" {
 		t.Fatalf("List: %v, got %+v", err, svcs)
 	}
 
-	if err := sc.Update(context.Background(), "svc1", UpdateServiceInput{Name: "web-v2"}); err != nil {
+	if err := sc.Update("svc1", UpdateServiceInput{Name: "web-v2"}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := sc.Start(context.Background(), "svc1"); err != nil {
+	if err := sc.Start("svc1"); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if err := sc.Stop(context.Background(), "svc1"); err != nil {
+	if err := sc.Stop("svc1"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if err := sc.Restart(context.Background(), "svc1"); err != nil {
+	if err := sc.Restart("svc1"); err != nil {
 		t.Fatalf("Restart: %v", err)
 	}
-	if err := sc.Delete(context.Background(), "svc1"); err != nil {
+	if err := sc.Delete("svc1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
@@ -609,7 +608,7 @@ func TestClient_get_queryParams(t *testing.T) {
 			writeJSON(w, map[string]any{"sandboxes": []SandboxView{}, "total": 0})
 		},
 	})
-	_, _, err := c.ListSandboxes(context.Background(), 5, 25)
+	_, _, err := c.ListSandboxes(5, 25)
 	if err != nil {
 		t.Fatalf("ListSandboxes: %v", err)
 	}
