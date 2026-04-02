@@ -11,12 +11,10 @@ import (
 	"golang.org/x/crypto/nacl/box"
 )
 
-// defaultPublicKey matches the default POCKETENV_PUBLIC_KEY in the TypeScript CLI.
 const defaultPublicKey = "2bf96e12d109e6948046a7803ef1696e12c11f04f20a6ce64dbd4bcd93db9341"
 
 // sealedBoxEncrypt implements libsodium's crypto_box_seal using X25519 + XSalsa20-Poly1305.
 // The nonce is derived as BLAKE2b-24(epk || rpk), matching libsodium's sealed-box construction.
-// The result is URL-safe Base64 without padding, matching the TypeScript CLI output.
 func sealedBoxEncrypt(recipientPublicKeyHex, message string) (string, error) {
 	rpkBytes, err := hex.DecodeString(recipientPublicKeyHex)
 	if err != nil {
@@ -57,7 +55,6 @@ func sealedBoxEncrypt(recipientPublicKeyHex, message string) (string, error) {
 
 // redact masks the middle of a value, keeping the first 11 and last 3 characters visible.
 // Values of 14 characters or fewer are returned unchanged.
-// Matches the TypeScript lib/redact.ts implementation.
 func redact(value string) string {
 	if len(value) <= 14 {
 		return value
