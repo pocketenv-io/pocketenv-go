@@ -11,12 +11,16 @@ type SecretClient struct {
 }
 
 func (sc *SecretClient) Add(name, value string) (*SecretView, error) {
+	encrypted, err := sc.client.encrypt(value)
+	if err != nil {
+		return nil, err
+	}
 	var result SecretView
 	body := map[string]any{
 		"secret": map[string]string{
 			"sandboxId": sc.sandboxID,
 			"name":      name,
-			"value":     value,
+			"value":     encrypted,
 		},
 	}
 	if err := sc.client.post("/xrpc/io.pocketenv.secret.addSecret", nil, body, &result); err != nil {
@@ -50,13 +54,17 @@ func (sc *SecretClient) Get(id string) (*SecretView, error) {
 }
 
 func (sc *SecretClient) Update(id, name, value string) (*SecretView, error) {
+	encrypted, err := sc.client.encrypt(value)
+	if err != nil {
+		return nil, err
+	}
 	var result SecretView
 	body := map[string]any{
 		"id": id,
 		"secret": map[string]string{
 			"sandboxId": sc.sandboxID,
 			"name":      name,
-			"value":     value,
+			"value":     encrypted,
 		},
 	}
 	if err := sc.client.post("/xrpc/io.pocketenv.secret.updateSecret", nil, body, &result); err != nil {

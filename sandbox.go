@@ -68,9 +68,14 @@ func (s *Sandbox) GetSshKeys() (*SshKeysView, error) {
 }
 
 func (s *Sandbox) PutSshKeys(publicKey, privateKey string) error {
+	encryptedPrivateKey, err := s.client.encrypt(privateKey)
+	if err != nil {
+		return err
+	}
 	return s.client.post("/xrpc/io.pocketenv.sandbox.putSshKeys", url.Values{"id": {s.ID}}, map[string]string{
 		"publicKey":  publicKey,
-		"privateKey": privateKey,
+		"privateKey": encryptedPrivateKey,
+		"redacted":   redactSSHKey(privateKey),
 	}, nil)
 }
 

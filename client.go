@@ -17,6 +17,7 @@ const defaultBaseURL = "https://api.pocketenv.io"
 type Client struct {
 	baseURL    string
 	token      string
+	publicKey  string
 	httpClient *http.Client
 }
 
@@ -34,6 +35,12 @@ func WithToken(token string) Option {
 	}
 }
 
+func WithPublicKey(publicKey string) Option {
+	return func(c *Client) {
+		c.publicKey = publicKey
+	}
+}
+
 func New(opts ...Option) (*Client, error) {
 	c := &Client{
 		baseURL:    defaultBaseURL,
@@ -41,6 +48,13 @@ func New(opts ...Option) (*Client, error) {
 	}
 	for _, opt := range opts {
 		opt(c)
+	}
+	if c.publicKey == "" {
+		if pk := os.Getenv("POCKETENV_PUBLIC_KEY"); pk != "" {
+			c.publicKey = pk
+		} else {
+			c.publicKey = defaultPublicKey
+		}
 	}
 	if c.token == "" {
 		if token := os.Getenv("POCKETENV_TOKEN"); token != "" {
@@ -137,6 +151,10 @@ func (c *Client) Volumes(sandboxID string) *VolumeClient {
 
 func (c *Client) Services(sandboxID string) *ServiceClient {
 	return &ServiceClient{client: c, sandboxID: sandboxID}
+}
+
+func (c *Client) encrypt(value string) (string, error) {
+	return sealedBoxEncrypt(c.publicKey, value)
 }
 
 // HTTP helpers

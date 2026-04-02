@@ -11,11 +11,15 @@ type FileClient struct {
 }
 
 func (fc *FileClient) Add(path, content string) error {
+	encrypted, err := fc.client.encrypt(content)
+	if err != nil {
+		return err
+	}
 	body := map[string]any{
 		"file": map[string]string{
 			"sandboxId": fc.sandboxID,
 			"path":      path,
-			"content":   content,
+			"content":   encrypted,
 		},
 	}
 	return fc.client.post("/xrpc/io.pocketenv.file.addFile", nil, body, nil)
@@ -48,11 +52,15 @@ func (fc *FileClient) Get(id string) (*FileView, error) {
 }
 
 func (fc *FileClient) Update(id, path, content string) error {
+	encrypted, err := fc.client.encrypt(content)
+	if err != nil {
+		return err
+	}
 	body := map[string]any{
 		"id": id,
 		"file": map[string]string{
 			"path":    path,
-			"content": content,
+			"content": encrypted,
 		},
 	}
 	return fc.client.post("/xrpc/io.pocketenv.file.updateFile", nil, body, nil)
