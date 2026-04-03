@@ -20,7 +20,6 @@ import (
     pocketenv "github.com/pocketenv-io/pocketenv-go"
 )
 
-
 func main() {
     // Token is read from POCKETENV_TOKEN env var or ~/.pocketenv/token.json
     client, err := pocketenv.New()
@@ -28,7 +27,6 @@ func main() {
         log.Fatal(err)
     }
 
-    // Create a sandbox — returns a handle with data + methods combined
     sb, err := client.CreateSandbox(pocketenv.CreateSandboxInput{
         Base: "openclaw",
         Name: "my-sandbox",
@@ -38,7 +36,6 @@ func main() {
     }
     fmt.Println("Created sandbox:", sb.ID, sb.Status)
 
-    // Call methods directly on the returned sandbox — no extra step needed
     result, err := sb.Exec("echo", "hello")
     if err != nil {
         log.Fatal(err)
@@ -60,30 +57,43 @@ If `WithToken` is not used, the token is resolved in this order:
 
 `New` returns an error if none of the above provide a token.
 
+## Error handling
+
+All API errors are returned as `*pocketenv.Error`, which exposes the HTTP status
+code so callers can handle specific cases without string-parsing:
+
+```go
+_, err := sb.Variables().Get("unknown-id")
+if e, ok := err.(*pocketenv.Error); ok && e.StatusCode == 404 {
+    // not found
+}
+```
+
 ## Sandboxes
 
 ```go
-// Create — returns *Sandbox with data fields AND methods ready to use
+// Create
 sb, err := client.CreateSandbox(pocketenv.CreateSandboxInput{Base: "openclaw"})
-fmt.Println(sb.ID, sb.Name, sb.Status) // data fields directly accessible
+fmt.Println(sb.ID, sb.Name, sb.Status)
 
-// Get — same: returns *Sandbox
-sb, err := client.GetSandbox("sandbox-id-or-name")
+// Get
+sb, err = client.GetSandbox("sandbox-id")
 
-// List — returns []*Sandbox, each usable as a handle
-sandboxes, total, err := client.ListSandboxes(0, 20)
-for _, sb := range sandboxes {
+// List — returns Page[*Sandbox] with Items and Total
+page, err := client.ListSandboxes(0, 20)
+fmt.Println(page.Total)
+for _, sb := range page.Items {
     fmt.Println(sb.ID, sb.Status)
 }
 
-// If you only have an ID (e.g. from config), get a lightweight handle:
-sb = client.Sandbox("sandbox-id")
+// Lightweight handle for a known ID (no API call)
+sb = client.SandboxRef("sandbox-id")
 
-// Actions — call directly on any *Sandbox
+// Actions
 err = sb.Start()
 err = sb.Stop()
 err = sb.Delete()
-err = sb.Refresh() // re-fetches data fields from API
+err = sb.Refresh() // re-fetches data from API
 
 // Execute a command
 result, err := sb.Exec("npm", "install")
@@ -101,73 +111,101 @@ err = sb.PutSshKeys(publicKey, privateKey)
 
 ## Secrets
 
+Values are encrypted client-side before being sent to the API.
+
 ```go
-sc := client.Sandbox("sandbox-id").Secrets()
+sc := sb.Secrets()
 // or: client.Secrets("sandbox-id")
 
-secret, err := sc.Add("DB_PASSWORD", "s3cr3t")
-secrets, total, err := sc.List(0, 20)
+secret, err := sc.Create("DB_PASSWORD", "s3cr3t")
+
+page, err := sc.List(0, 20)
+fmt.Println(page.Total)
+
 secret, err = sc.Get("secret-id")
-secret, err = sc.Update("secret-id", "DB_PASSWORD", "new-value")
-err = sc.Delete("secret-id")
+
+// Update and Delete are called on the secret itself — no ID needed
+secret, err = secret.Update("DB_PASSWORD", "new-value")
+err = secret.Delete()
+err = secret.Refresh()
 ```
 
 ## Environment Variables
 
 ```go
-vc := client.Sandbox("sandbox-id").Variables()
+vc := sb.Variables()
 // or: client.Variables("sandbox-id")
 
-variable, err := vc.Add("PORT", "8080")
-variables, total, err := vc.List(0, 20)
+variable, err := vc.Create("PORT", "8080")
+
+page, err := vc.List(0, 20)
+fmt.Println(page.Total)
+
 variable, err = vc.Get("variable-id")
-variable, err = vc.Update("variable-id", "PORT", "9090")
-err = vc.Delete("variable-id")
+
+variable, err = variable.Update("PORT", "9090")
+err = variable.Delete()
+err = variable.Refresh()
 ```
 
 ## Files
 
+File contents are encrypted client-side before being sent to the API.
+
 ```go
-fc := client.Sandbox("sandbox-id").Files()
+fc := sb.Files()
 // or: client.Files("sandbox-id")
 
-err = fc.Add("/app/config.json", `{"port": 8080}`)
-files, total, err := fc.List(0, 20)
+err = fc.Create("/app/config.json", `{"port": 8080}`)
+
+page, err := fc.List(0, 20)
+fmt.Println(page.Total)
+
 file, err := fc.Get("file-id")
-err = fc.Update("file-id", "/app/config.json", `{"port": 9090}`)
-err = fc.Delete("file-id")
+
+err = file.Update("/app/config.json", `{"port": 9090}`)
+err = file.Delete()
+err = file.Refresh()
 ```
 
 ## Volumes
 
 ```go
-vc := client.Sandbox("sandbox-id").Volumes()
+vc := sb.Volumes()
 // or: client.Volumes("sandbox-id")
 
-err = vc.Add("my-volume", "/data")
-volumes, total, err := vc.List(0, 20)
+err = vc.Create("my-volume", "/data")
+
+page, err := vc.List(0, 20)
+fmt.Println(page.Total)
+
 volume, err := vc.Get("volume-id")
-err = vc.Update("volume-id", "my-volume", "/mnt/data")
-err = vc.Delete("volume-id")
+
+err = volume.Update("my-volume", "/mnt/data")
+err = volume.Delete()
+err = volume.Refresh()
 ```
 
 ## Services
 
 ```go
-sc := client.Sandbox("sandbox-id").Services()
+sc := sb.Services()
 // or: client.Services("sandbox-id")
 
-err = sc.Add(pocketenv.AddServiceInput{
+err = sc.Create(pocketenv.AddServiceInput{
     Name:    "web",
     Command: "node server.js",
     Ports:   []int{3000},
 })
+
 services, err := sc.List()
-err = sc.Update("service-id", pocketenv.UpdateServiceInput{Name: "web-v2"})
-err = sc.Start("service-id")
-err = sc.Stop("service-id")
-err = sc.Restart("service-id")
-err = sc.Delete("service-id")
+
+svc := services[0]
+err = svc.Update(pocketenv.UpdateServiceInput{Name: "web-v2"})
+err = svc.Start()
+err = svc.Stop()
+err = svc.Restart()
+err = svc.Delete()
 ```
 
 ## License

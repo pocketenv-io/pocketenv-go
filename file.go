@@ -5,29 +5,63 @@ import (
 	"net/url"
 )
 
+type File struct {
+	fileView
+	sandboxID string
+	client    *Client
+}
+
+func (f *File) Update(path, content string) error {
+	encrypted, err := f.client.encrypt(content)
+	if err != nil {
+		return err
+	}
+	return f.client.post("/xrpc/io.pocketenv.file.updateFile", nil, map[string]any{
+		"id": f.ID,
+		"file": map[string]string{
+			"path":    path,
+			"content": encrypted,
+		},
+	}, nil)
+}
+
+func (f *File) Delete() error {
+	return f.client.post("/xrpc/io.pocketenv.file.deleteFile", url.Values{"id": {f.ID}}, nil, nil)
+}
+
+func (f *File) Refresh() error {
+	var raw struct {
+		File fileView `json:"file"`
+	}
+	if err := f.client.get("/xrpc/io.pocketenv.file.getFile", url.Values{"id": {f.ID}}, &raw); err != nil {
+		return err
+	}
+	f.fileView = raw.File
+	return nil
+}
+
 type FileClient struct {
 	client    *Client
 	sandboxID string
 }
 
-func (fc *FileClient) Add(path, content string) error {
+func (fc *FileClient) Create(path, content string) error {
 	encrypted, err := fc.client.encrypt(content)
 	if err != nil {
 		return err
 	}
-	body := map[string]any{
+	return fc.client.post("/xrpc/io.pocketenv.file.addFile", nil, map[string]any{
 		"file": map[string]string{
 			"sandboxId": fc.sandboxID,
 			"path":      path,
 			"content":   encrypted,
 		},
-	}
-	return fc.client.post("/xrpc/io.pocketenv.file.addFile", nil, body, nil)
+	}, nil)
 }
 
-func (fc *FileClient) List(offset, limit int) ([]FileView, int, error) {
-	var result struct {
-		Files []FileView `json:"files"`
+func (fc *FileClient) List(offset, limit int) (Page[*File], error) {
+	var raw struct {
+		Files []fileView `json:"files"`
 		Total int        `json:"total"`
 	}
 	params := url.Values{
@@ -35,37 +69,22 @@ func (fc *FileClient) List(offset, limit int) ([]FileView, int, error) {
 		"offset":    {fmt.Sprintf("%d", offset)},
 		"limit":     {fmt.Sprintf("%d", limit)},
 	}
-	if err := fc.client.get("/xrpc/io.pocketenv.file.getFiles", params, &result); err != nil {
-		return nil, 0, err
+	if err := fc.client.get("/xrpc/io.pocketenv.file.getFiles", params, &raw); err != nil {
+		return Page[*File]{}, err
 	}
-	return result.Files, result.Total, nil
+	items := make([]*File, len(raw.Files))
+	for i := range raw.Files {
+		items[i] = &File{fileView: raw.Files[i], sandboxID: fc.sandboxID, client: fc.client}
+	}
+	return Page[*File]{Items: items, Total: raw.Total}, nil
 }
 
-func (fc *FileClient) Get(id string) (*FileView, error) {
-	var result struct {
-		File FileView `json:"file"`
+func (fc *FileClient) Get(id string) (*File, error) {
+	var raw struct {
+		File fileView `json:"file"`
 	}
-	if err := fc.client.get("/xrpc/io.pocketenv.file.getFile", url.Values{"id": {id}}, &result); err != nil {
+	if err := fc.client.get("/xrpc/io.pocketenv.file.getFile", url.Values{"id": {id}}, &raw); err != nil {
 		return nil, err
 	}
-	return &result.File, nil
-}
-
-func (fc *FileClient) Update(id, path, content string) error {
-	encrypted, err := fc.client.encrypt(content)
-	if err != nil {
-		return err
-	}
-	body := map[string]any{
-		"id": id,
-		"file": map[string]string{
-			"path":    path,
-			"content": encrypted,
-		},
-	}
-	return fc.client.post("/xrpc/io.pocketenv.file.updateFile", nil, body, nil)
-}
-
-func (fc *FileClient) Delete(id string) error {
-	return fc.client.post("/xrpc/io.pocketenv.file.deleteFile", url.Values{"id": {id}}, nil, nil)
+	return &File{fileView: raw.File, sandboxID: fc.sandboxID, client: fc.client}, nil
 }

@@ -91,32 +91,33 @@ func readTokenFile() (string, error) {
 	return v.Token, nil
 }
 
-func (c *Client) Sandbox(id string) *Sandbox {
-	return &Sandbox{SandboxView: SandboxView{ID: id}, client: c}
+// SandboxRef returns a lightweight handle for a known sandbox ID without
+// making an API call. Use GetSandbox to fetch its current data from the API.
+func (c *Client) SandboxRef(id string) *Sandbox {
+	return &Sandbox{sandboxView: sandboxView{ID: id}, client: c}
 }
 
-// CreateSandbox creates a new sandbox and returns it as a ready-to-use handle.
 func (c *Client) CreateSandbox(input CreateSandboxInput) (*Sandbox, error) {
-	var view SandboxView
+	var view sandboxView
 	if err := c.post("/xrpc/io.pocketenv.sandbox.createSandbox", nil, input, &view); err != nil {
 		return nil, err
 	}
-	return &Sandbox{SandboxView: view, client: c}, nil
+	return &Sandbox{sandboxView: view, client: c}, nil
 }
 
 func (c *Client) GetSandbox(id string) (*Sandbox, error) {
 	var result struct {
-		Sandbox SandboxView `json:"sandbox"`
+		Sandbox sandboxView `json:"sandbox"`
 	}
 	if err := c.get("/xrpc/io.pocketenv.sandbox.getSandbox", url.Values{"id": {id}}, &result); err != nil {
 		return nil, err
 	}
-	return &Sandbox{SandboxView: result.Sandbox, client: c}, nil
+	return &Sandbox{sandboxView: result.Sandbox, client: c}, nil
 }
 
-func (c *Client) ListSandboxes(offset, limit int) ([]*Sandbox, int, error) {
+func (c *Client) ListSandboxes(offset, limit int) (Page[*Sandbox], error) {
 	var result struct {
-		Sandboxes []SandboxView `json:"sandboxes"`
+		Sandboxes []sandboxView `json:"sandboxes"`
 		Total     int           `json:"total"`
 	}
 	params := url.Values{
@@ -124,13 +125,13 @@ func (c *Client) ListSandboxes(offset, limit int) ([]*Sandbox, int, error) {
 		"limit":  {fmt.Sprintf("%d", limit)},
 	}
 	if err := c.get("/xrpc/io.pocketenv.sandbox.getSandboxes", params, &result); err != nil {
-		return nil, 0, err
+		return Page[*Sandbox]{}, err
 	}
-	sandboxes := make([]*Sandbox, len(result.Sandboxes))
+	items := make([]*Sandbox, len(result.Sandboxes))
 	for i, v := range result.Sandboxes {
-		sandboxes[i] = &Sandbox{SandboxView: v, client: c}
+		items[i] = &Sandbox{sandboxView: v, client: c}
 	}
-	return sandboxes, result.Total, nil
+	return Page[*Sandbox]{Items: items, Total: result.Total}, nil
 }
 
 func (c *Client) Secrets(sandboxID string) *SecretClient {
@@ -205,7 +206,7 @@ func (c *Client) do(req *http.Request, out any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("pocketenv: HTTP %d: %s", resp.StatusCode, string(b))
+		return &Error{StatusCode: resp.StatusCode, Message: string(b)}
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)

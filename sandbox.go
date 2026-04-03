@@ -6,7 +6,7 @@ import (
 )
 
 type Sandbox struct {
-	SandboxView
+	sandboxView
 	client *Client
 }
 
@@ -15,7 +15,7 @@ func (s *Sandbox) Refresh() error {
 	if err != nil {
 		return err
 	}
-	s.SandboxView = updated.SandboxView
+	s.sandboxView = updated.sandboxView
 	return nil
 }
 

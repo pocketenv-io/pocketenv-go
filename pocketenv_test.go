@@ -38,6 +38,8 @@ func assertBearer(t *testing.T, r *http.Request, want string) {
 	}
 }
 
+// ── Client ────────────────────────────────────────────────────────────────────
+
 func TestNew_defaults(t *testing.T) {
 	c, err := New(WithToken("test"))
 	if err != nil {
@@ -49,7 +51,6 @@ func TestNew_defaults(t *testing.T) {
 }
 
 func TestNew_noToken(t *testing.T) {
-	// Ensure no token file exists for this test by pointing home somewhere empty.
 	t.Setenv("HOME", t.TempDir())
 	_, err := New()
 	if err == nil {
@@ -77,6 +78,8 @@ func TestWithToken(t *testing.T) {
 	}
 }
 
+// ── Error type ────────────────────────────────────────────────────────────────
+
 func TestDo_HTTPError(t *testing.T) {
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.sandbox.getSandbox": func(w http.ResponseWriter, r *http.Request) {
@@ -87,13 +90,22 @@ func TestDo_HTTPError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error should mention HTTP 404, got: %v", err)
+	apiErr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("expected *Error, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 404 {
+		t.Errorf("StatusCode = %d, want 404", apiErr.StatusCode)
+	}
+	if !strings.Contains(apiErr.Error(), "404") {
+		t.Errorf("Error() should mention 404, got: %v", apiErr.Error())
 	}
 }
 
+// ── Sandboxes ─────────────────────────────────────────────────────────────────
+
 func TestCreateSandbox(t *testing.T) {
-	want := SandboxView{ID: "s1", Name: "my-sandbox", Status: "RUNNING"}
+	want := sandboxView{ID: "s1", Name: "my-sandbox", Status: "RUNNING"}
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.sandbox.createSandbox": func(w http.ResponseWriter, r *http.Request) {
 			assertBearer(t, r, "test-token")
@@ -113,12 +125,12 @@ func TestCreateSandbox(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.ID != want.ID || got.Name != want.Name {
-		t.Errorf("got %+v, want %+v", got.SandboxView, want)
+		t.Errorf("got %+v, want %+v", got.sandboxView, want)
 	}
 }
 
 func TestGetSandbox(t *testing.T) {
-	want := SandboxView{ID: "s1", Name: "box"}
+	want := sandboxView{ID: "s1", Name: "box"}
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.sandbox.getSandbox": func(w http.ResponseWriter, r *http.Request) {
 			assertBearer(t, r, "test-token")
@@ -133,12 +145,12 @@ func TestGetSandbox(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.ID != want.ID {
-		t.Errorf("got %+v, want %+v", got.SandboxView, want)
+		t.Errorf("got %+v, want %+v", got.sandboxView, want)
 	}
 }
 
 func TestListSandboxes(t *testing.T) {
-	boxes := []SandboxView{{ID: "s1"}, {ID: "s2"}}
+	boxes := []sandboxView{{ID: "s1"}, {ID: "s2"}}
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.sandbox.getSandboxes": func(w http.ResponseWriter, r *http.Request) {
 			q := r.URL.Query()
@@ -148,16 +160,26 @@ func TestListSandboxes(t *testing.T) {
 			writeJSON(w, map[string]any{"sandboxes": boxes, "total": 2})
 		},
 	})
-	got, total, err := c.ListSandboxes(0, 10)
+	page, err := c.ListSandboxes(0, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if total != 2 || len(got) != 2 {
-		t.Errorf("got %d/%d sandboxes, want 2/2", len(got), total)
+	if page.Total != 2 || len(page.Items) != 2 {
+		t.Errorf("got %d/%d sandboxes, want 2/2", len(page.Items), page.Total)
 	}
-	// each item is a usable handle
-	if got[0].ID != "s1" || got[1].ID != "s2" {
-		t.Errorf("unexpected IDs: %v %v", got[0].ID, got[1].ID)
+	if page.Items[0].ID != "s1" || page.Items[1].ID != "s2" {
+		t.Errorf("unexpected IDs: %v %v", page.Items[0].ID, page.Items[1].ID)
+	}
+}
+
+func TestSandboxRef(t *testing.T) {
+	c, err := New(WithToken("test"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	sb := c.SandboxRef("abc")
+	if sb.ID != "abc" {
+		t.Errorf("ID = %q, want abc", sb.ID)
 	}
 }
 
@@ -176,7 +198,7 @@ func TestSandbox_StartStop(t *testing.T) {
 			writeJSON(w, map[string]any{})
 		},
 	})
-	sb := c.Sandbox("s1")
+	sb := c.SandboxRef("s1")
 	if err := sb.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -196,7 +218,7 @@ func TestSandbox_Delete(t *testing.T) {
 			writeJSON(w, map[string]any{})
 		},
 	})
-	if err := c.Sandbox("s1").Delete(); err != nil {
+	if err := c.SandboxRef("s1").Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if !called {
@@ -215,7 +237,7 @@ func TestSandbox_Exec(t *testing.T) {
 			writeJSON(w, ExecResult{Stdout: "hello\n", Stderr: "", ExitCode: 0})
 		},
 	})
-	res, err := c.Sandbox("s1").Exec("echo", "hello")
+	res, err := c.SandboxRef("s1").Exec("echo", "hello")
 	if err != nil {
 		t.Fatalf("Exec: %v", err)
 	}
@@ -236,7 +258,7 @@ func TestSandbox_ExposeUnexposePort(t *testing.T) {
 			writeJSON(w, map[string]any{})
 		},
 	})
-	sb := c.Sandbox("s1")
+	sb := c.SandboxRef("s1")
 	if err := sb.ExposePort(3000, "app"); err != nil {
 		t.Fatalf("ExposePort: %v", err)
 	}
@@ -255,7 +277,7 @@ func TestSandbox_GetExposedPorts(t *testing.T) {
 			writeJSON(w, map[string]any{"ports": want})
 		},
 	})
-	got, err := c.Sandbox("s1").GetExposedPorts()
+	got, err := c.SandboxRef("s1").GetExposedPorts()
 	if err != nil {
 		t.Fatalf("GetExposedPorts: %v", err)
 	}
@@ -280,7 +302,7 @@ func TestSandbox_SshKeys(t *testing.T) {
 			writeJSON(w, map[string]any{})
 		},
 	})
-	sb := c.Sandbox("s1")
+	sb := c.SandboxRef("s1")
 	got, err := sb.GetSshKeys()
 	if err != nil {
 		t.Fatalf("GetSshKeys: %v", err)
@@ -293,9 +315,11 @@ func TestSandbox_SshKeys(t *testing.T) {
 	}
 }
 
+// ── Secrets ───────────────────────────────────────────────────────────────────
+
 func TestSecretClient_CRUD(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	s := SecretView{ID: "sec1", Name: "DB_PASS", Value: "secret", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
+	s := secretView{ID: "sec1", Name: "DB_PASS", Value: "secret", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
 
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.secret.addSecret": func(w http.ResponseWriter, r *http.Request) {
@@ -308,7 +332,7 @@ func TestSecretClient_CRUD(t *testing.T) {
 			writeJSON(w, s)
 		},
 		"/xrpc/io.pocketenv.secret.getSecrets": func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(w, map[string]any{"secrets": []SecretView{s}, "total": 1})
+			writeJSON(w, map[string]any{"secrets": []secretView{s}, "total": 1})
 		},
 		"/xrpc/io.pocketenv.secret.getSecret": func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Query().Get("id") != "sec1" {
@@ -327,16 +351,16 @@ func TestSecretClient_CRUD(t *testing.T) {
 		},
 	})
 
-	sc := c.Sandbox("s1").Secrets()
+	sc := c.SandboxRef("s1").Secrets()
 
-	added, err := sc.Add("DB_PASS", "secret")
-	if err != nil || added.ID != "sec1" {
-		t.Fatalf("Add: %v, got %+v", err, added)
+	created, err := sc.Create("DB_PASS", "secret")
+	if err != nil || created.ID != "sec1" {
+		t.Fatalf("Create: %v, got %+v", err, created)
 	}
 
-	secrets, total, err := sc.List(0, 10)
-	if err != nil || total != 1 || len(secrets) != 1 {
-		t.Fatalf("List: %v, total=%d len=%d", err, total, len(secrets))
+	page, err := sc.List(0, 10)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("List: %v, total=%d len=%d", err, page.Total, len(page.Items))
 	}
 
 	got, err := sc.Get("sec1")
@@ -344,19 +368,51 @@ func TestSecretClient_CRUD(t *testing.T) {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	updated, err := sc.Update("sec1", "DB_PASS", "new-secret")
+	// Update and Delete on the resource object — no ID needed
+	updated, err := got.Update("DB_PASS", "new-secret")
 	if err != nil || updated.ID != "sec1" {
 		t.Fatalf("Update: %v, got %+v", err, updated)
 	}
 
-	if err := sc.Delete("sec1"); err != nil {
+	if err := updated.Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
 
+func TestSecret_Refresh(t *testing.T) {
+	s := secretView{ID: "sec1", Name: "DB_PASS", Value: "original"}
+	refreshed := secretView{ID: "sec1", Name: "DB_PASS", Value: "refreshed"}
+	calls := 0
+
+	c, _ := newTestServer(t, map[string]http.HandlerFunc{
+		"/xrpc/io.pocketenv.secret.getSecret": func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				writeJSON(w, s)
+			} else {
+				writeJSON(w, refreshed)
+			}
+		},
+	})
+
+	sc := c.SandboxRef("s1").Secrets()
+	secret, err := sc.Get("sec1")
+	if err != nil || secret.Value != "original" {
+		t.Fatalf("Get: %v, value=%q", err, secret.Value)
+	}
+	if err := secret.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if secret.Value != "refreshed" {
+		t.Errorf("after Refresh, Value = %q, want %q", secret.Value, "refreshed")
+	}
+}
+
+// ── Variables ─────────────────────────────────────────────────────────────────
+
 func TestVariableClient_CRUD(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	v := VariableView{ID: "var1", Name: "PORT", Value: "8080", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
+	v := variableView{ID: "var1", Name: "PORT", Value: "8080", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
 
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.variable.addVariable": func(w http.ResponseWriter, r *http.Request) {
@@ -369,7 +425,7 @@ func TestVariableClient_CRUD(t *testing.T) {
 			writeJSON(w, v)
 		},
 		"/xrpc/io.pocketenv.variable.getVariables": func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(w, map[string]any{"variables": []VariableView{v}, "total": 1})
+			writeJSON(w, map[string]any{"variables": []variableView{v}, "total": 1})
 		},
 		"/xrpc/io.pocketenv.variable.getVariable": func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, v)
@@ -382,16 +438,16 @@ func TestVariableClient_CRUD(t *testing.T) {
 		},
 	})
 
-	vc := c.Sandbox("s1").Variables()
+	vc := c.SandboxRef("s1").Variables()
 
-	added, err := vc.Add("PORT", "8080")
-	if err != nil || added.ID != "var1" {
-		t.Fatalf("Add: %v, got %+v", err, added)
+	created, err := vc.Create("PORT", "8080")
+	if err != nil || created.ID != "var1" {
+		t.Fatalf("Create: %v, got %+v", err, created)
 	}
 
-	vars, total, err := vc.List(0, 10)
-	if err != nil || total != 1 || len(vars) != 1 {
-		t.Fatalf("List: %v, total=%d len=%d", err, total, len(vars))
+	page, err := vc.List(0, 10)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("List: %v, total=%d len=%d", err, page.Total, len(page.Items))
 	}
 
 	got, err := vc.Get("var1")
@@ -399,13 +455,42 @@ func TestVariableClient_CRUD(t *testing.T) {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	updated, err := vc.Update("var1", "PORT", "9090")
+	updated, err := got.Update("PORT", "9090")
 	if err != nil || updated.ID != "var1" {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := vc.Delete("var1"); err != nil {
+	if err := updated.Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
+	}
+}
+
+func TestVariable_Refresh(t *testing.T) {
+	v := variableView{ID: "var1", Name: "PORT", Value: "8080"}
+	refreshed := variableView{ID: "var1", Name: "PORT", Value: "9090"}
+	calls := 0
+
+	c, _ := newTestServer(t, map[string]http.HandlerFunc{
+		"/xrpc/io.pocketenv.variable.getVariable": func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				writeJSON(w, v)
+			} else {
+				writeJSON(w, refreshed)
+			}
+		},
+	})
+
+	vc := c.SandboxRef("s1").Variables()
+	variable, err := vc.Get("var1")
+	if err != nil || variable.Value != "8080" {
+		t.Fatalf("Get: %v, value=%q", err, variable.Value)
+	}
+	if err := variable.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if variable.Value != "9090" {
+		t.Errorf("after Refresh, Value = %q, want %q", variable.Value, "9090")
 	}
 }
 
@@ -413,7 +498,7 @@ func TestVariableClient_CRUD(t *testing.T) {
 
 func TestFileClient_CRUD(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	f := FileView{ID: "f1", Path: "/app/main.go", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
+	f := fileView{ID: "f1", Path: "/app/main.go", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
 
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.file.addFile": func(w http.ResponseWriter, r *http.Request) {
@@ -429,7 +514,7 @@ func TestFileClient_CRUD(t *testing.T) {
 			if r.URL.Query().Get("sandboxId") != "s1" {
 				t.Errorf("sandboxId param missing")
 			}
-			writeJSON(w, map[string]any{"files": []FileView{f}, "total": 1})
+			writeJSON(w, map[string]any{"files": []fileView{f}, "total": 1})
 		},
 		"/xrpc/io.pocketenv.file.getFile": func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"file": f})
@@ -445,15 +530,15 @@ func TestFileClient_CRUD(t *testing.T) {
 		},
 	})
 
-	fc := c.Sandbox("s1").Files()
+	fc := c.SandboxRef("s1").Files()
 
-	if err := fc.Add("/app/main.go", "package main"); err != nil {
-		t.Fatalf("Add: %v", err)
+	if err := fc.Create("/app/main.go", "package main"); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
-	files, total, err := fc.List(0, 20)
-	if err != nil || total != 1 || len(files) != 1 {
-		t.Fatalf("List: %v, total=%d len=%d", err, total, len(files))
+	page, err := fc.List(0, 20)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("List: %v, total=%d len=%d", err, page.Total, len(page.Items))
 	}
 
 	got, err := fc.Get("f1")
@@ -461,12 +546,41 @@ func TestFileClient_CRUD(t *testing.T) {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	if err := fc.Update("f1", "/app/main.go", "package main\n"); err != nil {
+	if err := got.Update("/app/main.go", "package main\n"); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := fc.Delete("f1"); err != nil {
+	if err := got.Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
+	}
+}
+
+func TestFile_Refresh(t *testing.T) {
+	f := fileView{ID: "f1", Path: "/app/v1.go"}
+	refreshed := fileView{ID: "f1", Path: "/app/v2.go"}
+	calls := 0
+
+	c, _ := newTestServer(t, map[string]http.HandlerFunc{
+		"/xrpc/io.pocketenv.file.getFile": func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				writeJSON(w, map[string]any{"file": f})
+			} else {
+				writeJSON(w, map[string]any{"file": refreshed})
+			}
+		},
+	})
+
+	fc := c.SandboxRef("s1").Files()
+	file, err := fc.Get("f1")
+	if err != nil || file.Path != "/app/v1.go" {
+		t.Fatalf("Get: %v, path=%q", err, file.Path)
+	}
+	if err := file.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if file.Path != "/app/v2.go" {
+		t.Errorf("after Refresh, Path = %q, want %q", file.Path, "/app/v2.go")
 	}
 }
 
@@ -474,7 +588,7 @@ func TestFileClient_CRUD(t *testing.T) {
 
 func TestVolumeClient_CRUD(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	vol := VolumeView{ID: "v1", Name: "data", Path: "/data", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
+	vol := volumeView{ID: "v1", Name: "data", Path: "/data", SandboxID: "s1", CreatedAt: now, UpdatedAt: now}
 
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.volume.addVolume": func(w http.ResponseWriter, r *http.Request) {
@@ -490,7 +604,7 @@ func TestVolumeClient_CRUD(t *testing.T) {
 			if r.URL.Query().Get("sandboxId") != "s1" {
 				t.Errorf("sandboxId param missing")
 			}
-			writeJSON(w, map[string]any{"volumes": []VolumeView{vol}, "total": 1})
+			writeJSON(w, map[string]any{"volumes": []volumeView{vol}, "total": 1})
 		},
 		"/xrpc/io.pocketenv.volume.getVolume": func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"volume": vol})
@@ -506,15 +620,15 @@ func TestVolumeClient_CRUD(t *testing.T) {
 		},
 	})
 
-	vc := c.Sandbox("s1").Volumes()
+	vc := c.SandboxRef("s1").Volumes()
 
-	if err := vc.Add("data", "/data"); err != nil {
-		t.Fatalf("Add: %v", err)
+	if err := vc.Create("data", "/data"); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
-	vols, total, err := vc.List(0, 20)
-	if err != nil || total != 1 || len(vols) != 1 {
-		t.Fatalf("List: %v, total=%d len=%d", err, total, len(vols))
+	page, err := vc.List(0, 20)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("List: %v, total=%d len=%d", err, page.Total, len(page.Items))
 	}
 
 	got, err := vc.Get("v1")
@@ -522,17 +636,48 @@ func TestVolumeClient_CRUD(t *testing.T) {
 		t.Fatalf("Get: %v, got %+v", err, got)
 	}
 
-	if err := vc.Update("v1", "data", "/mnt/data"); err != nil {
+	if err := got.Update("data", "/mnt/data"); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := vc.Delete("v1"); err != nil {
+	if err := got.Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
 
+func TestVolume_Refresh(t *testing.T) {
+	vol := volumeView{ID: "v1", Name: "data", Path: "/data"}
+	refreshed := volumeView{ID: "v1", Name: "data", Path: "/mnt/data"}
+	calls := 0
+
+	c, _ := newTestServer(t, map[string]http.HandlerFunc{
+		"/xrpc/io.pocketenv.volume.getVolume": func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				writeJSON(w, map[string]any{"volume": vol})
+			} else {
+				writeJSON(w, map[string]any{"volume": refreshed})
+			}
+		},
+	})
+
+	vc := c.SandboxRef("s1").Volumes()
+	volume, err := vc.Get("v1")
+	if err != nil || volume.Path != "/data" {
+		t.Fatalf("Get: %v, path=%q", err, volume.Path)
+	}
+	if err := volume.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if volume.Path != "/mnt/data" {
+		t.Errorf("after Refresh, Path = %q, want %q", volume.Path, "/mnt/data")
+	}
+}
+
+// ── Services ──────────────────────────────────────────────────────────────────
+
 func TestServiceClient_CRUD(t *testing.T) {
-	svc := ServiceView{ID: "svc1", Name: "web", Command: "node server.js", Status: "RUNNING", SandboxID: "s1"}
+	svc := serviceView{ID: "svc1", Name: "web", Command: "node server.js", Status: "RUNNING", SandboxID: "s1"}
 
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.service.addService": func(w http.ResponseWriter, r *http.Request) {
@@ -551,7 +696,7 @@ func TestServiceClient_CRUD(t *testing.T) {
 			if r.URL.Query().Get("sandboxId") != "s1" {
 				t.Errorf("sandboxId param missing")
 			}
-			writeJSON(w, map[string]any{"services": []ServiceView{svc}})
+			writeJSON(w, map[string]any{"services": []serviceView{svc}})
 		},
 		"/xrpc/io.pocketenv.service.updateService": func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Query().Get("serviceId") != "svc1" {
@@ -579,10 +724,10 @@ func TestServiceClient_CRUD(t *testing.T) {
 		},
 	})
 
-	sc := c.Sandbox("s1").Services()
+	sc := c.SandboxRef("s1").Services()
 
-	if err := sc.Add(AddServiceInput{Name: "web", Command: "node server.js", Ports: []int{3000}}); err != nil {
-		t.Fatalf("Add: %v", err)
+	if err := sc.Create(AddServiceInput{Name: "web", Command: "node server.js", Ports: []int{3000}}); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
 	svcs, err := sc.List()
@@ -590,46 +735,36 @@ func TestServiceClient_CRUD(t *testing.T) {
 		t.Fatalf("List: %v, got %+v", err, svcs)
 	}
 
-	if err := sc.Update("svc1", UpdateServiceInput{Name: "web-v2"}); err != nil {
+	// All lifecycle methods on the service object — no ID needed
+	s := svcs[0]
+	if err := s.Update(UpdateServiceInput{Name: "web-v2"}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-
-	if err := sc.Start("svc1"); err != nil {
+	if err := s.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if err := sc.Stop("svc1"); err != nil {
+	if err := s.Stop(); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if err := sc.Restart("svc1"); err != nil {
+	if err := s.Restart(); err != nil {
 		t.Fatalf("Restart: %v", err)
 	}
-	if err := sc.Delete("svc1"); err != nil {
+	if err := s.Delete(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 }
 
-// ── Helpers scoped to Client ───────────────────────────────────────────────────
-
-func TestClient_SandboxHandle(t *testing.T) {
-	c, err := New(WithToken("test"))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	sb := c.Sandbox("abc")
-	if sb.ID != "abc" {
-		t.Errorf("ID = %q, want abc", sb.ID)
-	}
-}
+// ── Pagination params ─────────────────────────────────────────────────────────
 
 func TestClient_get_queryParams(t *testing.T) {
 	var gotQuery url.Values
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
 		"/xrpc/io.pocketenv.sandbox.getSandboxes": func(w http.ResponseWriter, r *http.Request) {
 			gotQuery = r.URL.Query()
-			writeJSON(w, map[string]any{"sandboxes": []SandboxView{}, "total": 0})
+			writeJSON(w, map[string]any{"sandboxes": []sandboxView{}, "total": 0})
 		},
 	})
-	_, _, err := c.ListSandboxes(5, 25)
+	_, err := c.ListSandboxes(5, 25)
 	if err != nil {
 		t.Fatalf("ListSandboxes: %v", err)
 	}

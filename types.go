@@ -2,7 +2,14 @@ package pocketenv
 
 import "time"
 
-type SandboxView struct {
+// Page holds a paginated result set.
+type Page[T any] struct {
+	Items []T
+	Total int
+}
+
+// sandboxView is the raw JSON shape returned by the API for a sandbox.
+type sandboxView struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Provider    string    `json:"provider"`
@@ -35,7 +42,8 @@ type CreateSandboxInput struct {
 	KeepAlive   bool     `json:"keepAlive,omitempty"`
 }
 
-type SecretView struct {
+// variableView is the raw JSON shape returned by the API for an environment variable.
+type variableView struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Value     string    `json:"value"`
@@ -44,7 +52,8 @@ type SecretView struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-type VariableView struct {
+// secretView is the raw JSON shape returned by the API for a secret.
+type secretView struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Value     string    `json:"value"`
@@ -53,7 +62,8 @@ type VariableView struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-type FileView struct {
+// fileView is the raw JSON shape returned by the API for a file.
+type fileView struct {
 	ID        string    `json:"id"`
 	Path      string    `json:"path"`
 	Content   string    `json:"content"`
@@ -62,7 +72,8 @@ type FileView struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-type VolumeView struct {
+// volumeView is the raw JSON shape returned by the API for a volume.
+type volumeView struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
@@ -70,6 +81,18 @@ type VolumeView struct {
 	SandboxID string    `json:"sandboxId"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// serviceView is the raw JSON shape returned by the API for a service.
+type serviceView struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	Ports       []int  `json:"ports,omitempty"`
+	Status      string `json:"status"`
+	SandboxID   string `json:"sandboxId"`
+	CreatedAt   string `json:"createdAt"`
 }
 
 type ExposedPort struct {
@@ -86,27 +109,10 @@ type SshKeysView struct {
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
-type AddVolumeInput struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	ReadOnly bool   `json:"readOnly,omitempty"`
-}
-
 type ExecResult struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exitCode"`
-}
-
-type ServiceView struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Command     string   `json:"command"`
-	Description string   `json:"description"`
-	Ports       []int    `json:"ports,omitempty"`
-	Status      string   `json:"status"`
-	SandboxID   string   `json:"sandboxId"`
-	CreatedAt   string   `json:"createdAt"`
 }
 
 type AddServiceInput struct {
