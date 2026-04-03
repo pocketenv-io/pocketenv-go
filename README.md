@@ -154,7 +154,6 @@ File contents are encrypted client-side before being sent to the API.
 
 ```go
 fc := sb.Files()
-// or: client.Files("sandbox-id")
 
 err = fc.Create("/app/config.json", `{"port": 8080}`)
 
@@ -172,7 +171,6 @@ err = file.Refresh()
 
 ```go
 vc := sb.Volumes()
-// or: client.Volumes("sandbox-id")
 
 err = vc.Create("my-volume", "/data")
 
@@ -190,7 +188,6 @@ err = volume.Refresh()
 
 ```go
 sc := sb.Services()
-// or: client.Services("sandbox-id")
 
 err = sc.Create(pocketenv.AddServiceInput{
     Name:    "web",
